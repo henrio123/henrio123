@@ -50,9 +50,53 @@ def format_plural(unit):
     return 's' if unit != 1 else ''
 
 
+MAX_RETRIES = 6
+
+
+def post_with_retry(func_name, query, variables):
+    """
+    POST to the GraphQL API, retrying transient failures.
+
+    GitHub answers 502/504 when a query takes too long on their side (common
+    while walking the full history of a large forked repository) and 403 when
+    the undocumented anti-abuse limit kicks in. Both are temporary, so back off
+    and try again instead of failing the whole run.
+    """
+    delay = 3
+    request = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            request = requests.post('https://api.github.com/graphql',
+                                    json={'query': query, 'variables': variables},
+                                    headers=HEADERS, timeout=90)
+        except requests.exceptions.RequestException as error:
+            if attempt == MAX_RETRIES:
+                raise
+            print(f'   {func_name}: network error ({error}); retry {attempt}/{MAX_RETRIES} in {delay}s')
+            time.sleep(delay)
+            delay *= 2
+            continue
+        if request.status_code == 200:
+            return request
+        if attempt == MAX_RETRIES:
+            return request
+        if request.status_code in (502, 504):
+            print(f'   {func_name}: HTTP {request.status_code} (GitHub timeout); retry {attempt}/{MAX_RETRIES} in {delay}s')
+            time.sleep(delay)
+            delay *= 2
+            continue
+        if request.status_code == 403:
+            wait = min(delay * 20, 300)  # anti-abuse limits clear in minutes, not half-hours
+            print(f'   {func_name}: HTTP 403 (rate limit); retry {attempt}/{MAX_RETRIES} in {wait}s')
+            time.sleep(wait)
+            delay *= 2
+            continue
+        return request  # a real error (401 bad token, 404, ...) - let the caller raise
+    return request
+
+
 def simple_request(func_name, query, variables):
-    request = requests.post('https://api.github.com/graphql',
-                            json={'query': query, 'variables': variables}, headers=HEADERS)
+    request = post_with_retry(func_name, query, variables)
     if request.status_code == 200:
         return request
     raise Exception(func_name, ' has failed with a', request.status_code, request.text, QUERY_COUNT)
@@ -120,8 +164,15 @@ def graph_repos_stars(count_type, owner_affiliation, cursor=None):
 
 
 def recursive_loc(owner, repo_name, data, cache_comment,
-                  addition_total=0, deletion_total=0, my_commits=0, cursor=None):
-    """Walk a repository's default-branch history 100 commits at a time."""
+                  addition_total=0, deletion_total=0, my_commits=0, cursor=None,
+                  page_size=100):
+    """
+    Walk a repository's default-branch history, page_size commits at a time.
+
+    Large repositories (a fork carries the whole upstream history) can make
+    GitHub time out on a 100-commit page. When that happens we retry the same
+    cursor with a smaller page instead of abandoning the repository.
+    """
     query_count('recursive_loc')
     query = '''
     query ($repo_name: String!, $owner: String!, $cursor: String) {
@@ -129,7 +180,7 @@ def recursive_loc(owner, repo_name, data, cache_comment,
             defaultBranchRef {
                 target {
                     ... on Commit {
-                        history(first: 100, after: $cursor) {
+                        history(first: PAGE_SIZE, after: $cursor) {
                             totalCount
                             edges {
                                 node {
@@ -154,16 +205,20 @@ def recursive_loc(owner, repo_name, data, cache_comment,
                 }
             }
         }
-    }'''
+    }'''.replace('PAGE_SIZE', str(page_size))
     variables = {'repo_name': repo_name, 'owner': owner, 'cursor': cursor}
-    request = requests.post('https://api.github.com/graphql',
-                            json={'query': query, 'variables': variables}, headers=HEADERS)
+    request = post_with_retry(f'recursive_loc({owner}/{repo_name})', query, variables)
     if request.status_code == 200:
         if request.json()['data']['repository']['defaultBranchRef'] is not None:
             return loc_counter_one_repo(owner, repo_name, data, cache_comment,
                                         request.json()['data']['repository']['defaultBranchRef']['target']['history'],
-                                        addition_total, deletion_total, my_commits)
+                                        addition_total, deletion_total, my_commits, page_size)
         return 0
+    if request.status_code in (502, 504) and page_size > 10:
+        smaller = max(10, page_size // 2)
+        print(f'   recursive_loc({owner}/{repo_name}): still timing out, retrying with {smaller} commits per page')
+        return recursive_loc(owner, repo_name, data, cache_comment,
+                             addition_total, deletion_total, my_commits, cursor, smaller)
     force_close_file(data, cache_comment)  # save partial cache before crashing
     if request.status_code == 403:
         raise Exception('Too many requests in a short amount of time!\nHit the anti-abuse limit.')
@@ -171,7 +226,7 @@ def recursive_loc(owner, repo_name, data, cache_comment,
 
 
 def loc_counter_one_repo(owner, repo_name, data, cache_comment, history,
-                         addition_total, deletion_total, my_commits):
+                         addition_total, deletion_total, my_commits, page_size=100):
     """Sum additions/deletions of commits authored by me."""
     for node in history['edges']:
         if node['node']['author']['user'] == OWNER_ID:
@@ -181,7 +236,8 @@ def loc_counter_one_repo(owner, repo_name, data, cache_comment, history,
     if history['edges'] == [] or not history['pageInfo']['hasNextPage']:
         return addition_total, deletion_total, my_commits
     return recursive_loc(owner, repo_name, data, cache_comment,
-                         addition_total, deletion_total, my_commits, history['pageInfo']['endCursor'])
+                         addition_total, deletion_total, my_commits,
+                         history['pageInfo']['endCursor'], page_size)
 
 
 def loc_query(owner_affiliation, comment_size=0, force_cache=False, cursor=None, edges=[]):
@@ -382,7 +438,27 @@ if __name__ == '__main__':
     age_data, age_time = perf_counter(daily_readme, birthday)
     formatter('age calculation', age_time)
 
-    total_loc, loc_time = perf_counter(loc_query, ['OWNER', 'COLLABORATOR', 'ORGANIZATION_MEMBER'], CACHE_COMMENT_SIZE)
+    try:
+        total_loc, loc_time = perf_counter(loc_query, ['OWNER', 'COLLABORATOR', 'ORGANIZATION_MEMBER'], CACHE_COMMENT_SIZE)
+    except Exception as error:
+        # The first run has an empty cache and must walk the full history of
+        # every repository, including large forks - GitHub sometimes gives up
+        # (502/504) before that finishes. Whatever was walked is already saved
+        # in the cache file, so exit with code 2: the workflow commits that
+        # progress and the next run resumes from there instead of restarting.
+        print('\n' + '=' * 72)
+        print('Lines-of-code walk did not finish this run:')
+        print(f'  {error}')
+        print('')
+        print('Progress so far has been saved to the cache and will be committed.')
+        print('Re-run the workflow to continue from where this run stopped.')
+        print('=' * 72)
+        # GitHub Actions annotation, so the run is visibly flagged as partial
+        print('::warning title=Stats incomplete::The lines-of-code walk timed out. '
+              'Cached progress was committed - re-run the workflow to continue.')
+        # Exit 0 on purpose: the workflow's commit step must run so the partial
+        # cache is saved. A real error (bad token, 404) still raises and fails.
+        raise SystemExit(0)
     formatter('LOC (cached)' if total_loc[-1] else 'LOC (no cache)', loc_time)
 
     commit_data, commit_time = perf_counter(commit_counter, CACHE_COMMENT_SIZE)
