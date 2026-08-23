@@ -1,0 +1,98 @@
+{
+  "title": "henri@nortal",
+  "system": [
+    {
+      "key": "OS",
+      "value": "macOS, Linux"
+    },
+    {
+      "key": "Uptime",
+      "value": "36 years, 8 months, 4 days",
+      "id": "age_data"
+    },
+    {
+      "key": "Host",
+      "value": "Nortal"
+    },
+    {
+      "key": "Kernel",
+      "value": "Forward Deployed Engineer"
+    },
+    {
+      "key": "IDE",
+      "value": "VS Code, IntelliJ IDEA"
+    },
+    {
+      "key": "Timezone",
+      "value": "Europe/Tallinn (UTC+2/+3)"
+    },
+    {
+      "blank": true
+    },
+    {
+      "key": "Languages.Programming",
+      "value": "TypeScript, JavaScript, Python"
+    },
+    {
+      "key": "Languages.Computer",
+      "value": "HTML, CSS, SQL, JSON, YAML"
+    },
+    {
+      "key": "Languages.Real",
+      "value": "Estonian, English"
+    },
+    {
+      "blank": true
+    },
+    {
+      "key": "Hobbies.Software",
+      "value": "AI Agents, Automation"
+    }
+  ],
+  "contact": [
+    {
+      "key": "LinkedIn",
+      "value": "in/henri-ots-b805a0a2"
+    },
+    {
+      "key": "GitHub",
+      "value": "henrio123"
+    }
+  ],
+  "stats": {
+    "repos": "7",
+    "contributed": "10",
+    "stars": "13",
+    "commits": "0",
+    "followers": "0",
+    "loc": "0",
+    "loc_add": "0",
+    "loc_del": "0"
+  },
+  "ascii": [
+    "             .``;|jji:'.",
+    "           |pbNN@@@%%NMbw|.",
+    "          ;M%%%NNWdqpwpbW@Mi",
+    "          lNq|jllj;;:. .,p@%,",
+    "          ,w'`;|ii|i:.   'ld:",
+    "          .:.;;jl|xxlj|:'.'j`",
+    "            .xqddwjxdMbx|. :;.",
+    "           `,lkbq|: `||:`  `|'",
+    "           :,:jxl;li`ii`''.',",
+    "            ',ilmkppj|k;'''",
+    "             `;xwlkwx|lx:,`:llllxkmml'",
+    "             'ixm;kqx:,lxj:|@@WN@@@%Ni",
+    "          .iwMWpxxmqwmwpqm'.qNWMNNWdd|",
+    "         lW@@%@@llbWN%Ndk;|b%NNNNNWWMd",
+    "        ,@@@%W%@q;jkppmxmd%%N%@%%%NNWM",
+    "         lWNNNN%WplkwmpM%@@@%%%NNNNNWW",
+    "      `ixqWMN%NN%@%N%%@@@%%%NNWWWNWNNW",
+    "    ipW@N@%d%NNN%%%NWN%NNNWWWWWWWWWNNM",
+    "   k%%%%MWMd@%NNWWNNNNNWWWWWWWWWWWNNWW",
+    "  ,W%N%WMWbM@NNWWN%NNWWWWWWWWWWWWW%NN@",
+    "  kNWWWMWWbM@NWN%%%NWWWWWWWWWWWNNNNNN@",
+    " ,bWWMMWWMqM@NN%%%NWWWWWWWWWNNNNN%%%N@",
+    " |MWMbMMWdqM@%%NNNWWWWNNNNNNNNNNNNN%%@",
+    " xWWMbMMNdqd@@%N%NNWWNNNNNNNNNNN%@%%%@"
+  ]
+}
