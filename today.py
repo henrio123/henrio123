@@ -159,8 +159,9 @@ def graph_repos_stars(count_type, owner_affiliation, cursor=None):
     request = simple_request(graph_repos_stars.__name__, query, variables)
     if count_type == 'repos':
         return request.json()['data']['user']['repositories']['totalCount']
-    return sum(node['node']['stargazers']['totalCount']
-               for node in request.json()['data']['user']['repositories']['edges'])
+    return sum(edge['node']['stargazers']['totalCount']
+               for edge in request.json()['data']['user']['repositories']['edges']
+               if edge['node'] is not None)
 
 
 def recursive_loc(owner, repo_name, data, cache_comment,
